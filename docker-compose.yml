@@ -1,0 +1,107 @@
+services:
+  web:
+    build:
+      context: ./gitlab
+      dockerfile: Dockerfile
+    container_name: gitlab-web
+    restart: always
+    hostname: 'gitlab.local'
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:8980'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+        postgresql['enable'] = false
+        gitlab_rails['db_adapter'] = 'postgresql'
+        gitlab_rails['db_encoding'] = 'unicode'
+        gitlab_rails['db_host'] = 'postgres'
+        gitlab_rails['db_username'] = 'gitlab'
+        gitlab_rails['db_password'] = '${GITLAB_POSTGRES_PASSWORD}'
+        gitlab_rails['db_database'] = 'gitlabhq_production'
+        redis['enable'] = false
+        gitlab_rails['redis_host'] = 'redis'
+        gitlab_rails['redis_port'] = 6379
+        gitlab_rails['redis_password'] = '${GITLAB_REDIS_PASSWORD}'
+        prometheus['enable'] = false
+        prometheus_monitoring['enable'] = false
+        nginx['listen_port'] = 80
+        nginx['listen_https'] = false
+        nginx['redirect_http_to_https'] = false
+      GITLAB_ROOT_PASSWORD: ${GITLAB_ROOT_PASSWORD}
+      GITLAB_ROOT_EMAIL: ${GITLAB_ROOT_EMAIL}
+      GITLAB_POSTGRES_PASSWORD: ${GITLAB_POSTGRES_PASSWORD}
+      GITLAB_REDIS_PASSWORD: ${GITLAB_REDIS_PASSWORD}
+      TZ: ${TZ}
+    ports:
+      - '8980:80'      # HTTP
+      - '6443:443'    # HTTPS
+      - '2222:22'      # SSH
+    volumes:
+      - './data/gitlab/config:/etc/gitlab'
+      - './data/gitlab/logs:/var/log/gitlab'
+      - './data/gitlab/data:/var/opt/gitlab'
+    networks:
+      - gitlab-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/-/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
+    container_name: gitlab-postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=gitlab
+      - POSTGRES_PASSWORD=${GITLAB_POSTGRES_PASSWORD}
+      - POSTGRES_DB=gitlabhq_production
+      - POSTGRES_INITDB_ARGS=--data-checksums
+      - PGDATA=/var/lib/postgresql/data/pgdata
+      - TZ=${TZ}
+    command: "postgres -c 'max_connections=500'"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - gitlab-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gitlab -d gitlabhq_production"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    build:
+      context: ./redis
+      dockerfile: Dockerfile
+    container_name: gitlab-redis
+    restart: always
+    environment:
+      - REDIS_PASSWORD=${GITLAB_REDIS_PASSWORD}
+      - TZ=${TZ}
+    command: ["sh", "-c", "redis-server --requirepass $$REDIS_PASSWORD --appendonly yes"]
+    ports:
+      - '6376:6379'
+    volumes:
+      - redis-data:/data
+    networks:
+      - gitlab-network
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${GITLAB_REDIS_PASSWORD} ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  gitlab-network:
+    driver: bridge

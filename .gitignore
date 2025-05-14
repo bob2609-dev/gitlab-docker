@@ -1,0 +1,40 @@
+# Docker data volumes
+data/
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+.DS_Store
+
+# Log files
+*.log
+logs/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Docker bind-mounted volumes
+postgres-data/
+redis-data/
+
+# Custom config (except .env which we want to keep tracked)
+.dockerconfig
+config.json
+
+# Temporary build files
+build/
+dist/
+tmp/
+
+# Node modules if you have any frontend components
+node_modules/
+
+# IDE specific files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
